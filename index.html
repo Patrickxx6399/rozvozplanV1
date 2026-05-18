@@ -1,0 +1,2179 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RozvozPlan · Dispatcher</title>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+<!-- QRCode -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<!-- jsPDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- SortableJS for drag-drop -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+
+<style>
+:root {
+  --bg: #0a0a0b;
+  --bg-elev: #131316;
+  --bg-elev2: #1c1c20;
+  --border: #2a2a30;
+  --border-bright: #3a3a42;
+  --text: #f5f5f5;
+  --text-muted: #8a8a92;
+  --text-dim: #5a5a62;
+  --accent: #ff6b1a;
+  --accent-dim: #ff6b1a33;
+  --accent-glow: #ff6b1a22;
+  --success: #4ade80;
+  --danger: #ef4444;
+  --warning: #fbbf24;
+  --info: #60a5fa;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Geist', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Layout */
+header {
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 18px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(8px);
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-size: 17px;
+}
+
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  background: var(--accent);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+}
+
+.brand-sub {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-left: 4px;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tab {
+  flex: 1;
+  min-width: 80px;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-radius: 5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.tab.active {
+  background: var(--accent);
+  color: #000;
+  font-weight: 600;
+}
+
+.tab:not(.active):hover {
+  background: var(--bg-elev2);
+  color: var(--text);
+}
+
+.tab-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  background: var(--bg-elev2);
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+.tab.active .tab-badge {
+  background: rgba(0,0,0,0.2);
+  color: #000;
+}
+
+main {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 18px;
+}
+
+.panel {
+  display: none;
+}
+
+.panel.active {
+  display: block;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.section {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.section-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text);
+}
+
+.section-title-accent {
+  width: 4px;
+  height: 14px;
+  background: var(--accent);
+  display: inline-block;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.section-body {
+  padding: 16px;
+}
+
+/* Forms */
+label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+input[type="text"],
+input[type="tel"],
+input[type="number"],
+textarea,
+select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg-elev2);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 140px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.form-row.three { grid-template-columns: 1fr 1fr 1fr; }
+
+@media (max-width: 600px) {
+  .form-row, .form-row.three { grid-template-columns: 1fr; }
+}
+
+.form-group {
+  margin-bottom: 12px;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: var(--bg-elev2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn:hover {
+  background: var(--border);
+  border-color: var(--border-bright);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  background: #ff8438;
+  border-color: #ff8438;
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: var(--border);
+}
+
+.btn-danger {
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn-danger:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn-sm {
+  padding: 6px 10px;
+  font-size: 11px;
+}
+
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Customer cards */
+.customer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.customer-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  transition: all 0.15s;
+}
+
+.customer-card:hover {
+  border-color: var(--border-bright);
+}
+
+.customer-card.in-plan {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.customer-card.depot {
+  border-left: 3px solid var(--info);
+}
+
+.customer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.customer-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.customer-pob {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.customer-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.customer-meta-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.meta-label {
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+  min-width: 56px;
+  padding-top: 1px;
+}
+
+.customer-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 7px;
+  background: var(--bg-elev2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.tag.geo-ok { color: var(--success); border-color: var(--success); }
+.tag.geo-fail { color: var(--danger); border-color: var(--danger); }
+.tag.geo-pending { color: var(--warning); border-color: var(--warning); }
+.tag.depot-tag { color: var(--info); border-color: var(--info); background: rgba(96, 165, 250, 0.08); }
+
+.subheader {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-top: 10px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed var(--border);
+}
+.subheader:first-child { margin-top: 0; }
+.subheader.info { color: var(--info); border-color: var(--info); }
+
+code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  background: var(--bg-elev2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--accent);
+}
+
+/* Plan list */
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 60px;
+}
+
+.plan-item {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: grab;
+  transition: all 0.15s;
+}
+
+.plan-item:hover {
+  border-color: var(--accent);
+}
+
+.plan-item.sortable-ghost {
+  opacity: 0.4;
+}
+
+.plan-item.sortable-chosen {
+  cursor: grabbing;
+  border-color: var(--accent);
+  box-shadow: 0 4px 20px rgba(255, 107, 26, 0.2);
+}
+
+.plan-num {
+  width: 32px;
+  height: 32px;
+  background: var(--accent);
+  color: #000;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.plan-num.depot { background: var(--info); color: #000; }
+
+.plan-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.plan-name {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.plan-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.plan-distance {
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.plan-distance strong {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+.empty-state-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+  opacity: 0.4;
+}
+
+/* Map */
+#mapPreview, #planMap {
+  height: 360px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+/* Stats */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.stat {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: -0.02em;
+}
+
+.stat-value.accent { color: var(--accent); }
+.stat-value.info { color: var(--info); }
+.stat-value.success { color: var(--success); }
+
+/* QR */
+.qr-wrap {
+  background: #fff;
+  padding: 16px;
+  border-radius: 8px;
+  display: inline-block;
+}
+
+/* Switch */
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.switch input { display: none; }
+
+.switch-track {
+  width: 36px;
+  height: 20px;
+  background: var(--border);
+  border-radius: 10px;
+  position: relative;
+  transition: background 0.15s;
+}
+
+.switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.15s;
+}
+
+.switch input:checked + .switch-track {
+  background: var(--accent);
+}
+
+.switch input:checked + .switch-track::after {
+  transform: translateX(16px);
+}
+
+.switch-label {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Toast */
+.toast-host {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 9999;
+  pointer-events: none;
+  max-width: calc(100vw - 32px);
+}
+
+.toast {
+  background: var(--bg-elev2);
+  border: 1px solid var(--border-bright);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  pointer-events: auto;
+  animation: slideIn 0.2s ease;
+  border-left: 3px solid var(--accent);
+  max-width: 340px;
+}
+
+.toast.success { border-left-color: var(--success); }
+.toast.error { border-left-color: var(--danger); }
+.toast.info { border-left-color: var(--info); }
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Misc */
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 14px 0;
+}
+
+.text-muted { color: var(--text-muted); }
+.text-dim { color: var(--text-dim); }
+.text-accent { color: var(--accent); }
+.text-sm { font-size: 12px; }
+.text-xs { font-size: 11px; }
+
+.flex { display: flex; }
+.flex-1 { flex: 1; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.flex-wrap { flex-wrap: wrap; }
+.mt-2 { margin-top: 8px; }
+.mt-3 { margin-top: 12px; }
+.mt-4 { margin-top: 16px; }
+.mb-2 { margin-bottom: 8px; }
+.mb-3 { margin-bottom: 12px; }
+.mb-4 { margin-bottom: 16px; }
+
+/* Two column layout for desktop */
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 900px) {
+  .split { grid-template-columns: 1fr; }
+}
+
+/* Print styles */
+@media print {
+  body { background: white; color: black; font-family: 'Geist', sans-serif; }
+  header, .tabs, .btn, .customer-actions, .section-header .btn, #importPanel, #customersPanel, #settingsPanel, .no-print { display: none !important; }
+  .panel { display: block !important; }
+  #planPanel { display: block !important; }
+  .section { background: white; border: 1px solid #ccc; box-shadow: none; page-break-inside: avoid; }
+  .section-body { padding: 12px; }
+  .plan-item { background: white; border: 1px solid #ccc; page-break-inside: avoid; }
+  .plan-num { background: #000; color: white; }
+  .stat { background: white; border: 1px solid #ccc; }
+  .stat-value { color: black !important; }
+  .empty-state, #mapPreview, #planMap { display: none !important; }
+  .qr-wrap { background: white; }
+  .print-only { display: block !important; }
+  @page { margin: 12mm; }
+}
+
+.print-only { display: none; }
+
+/* Leaflet dark adjust */
+.leaflet-container { background: #1c1c20; }
+
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background: var(--bg-elev2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.marker-num {
+  background: var(--accent);
+  color: #000;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 12px;
+  border: 2px solid #000;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+
+.marker-num.shop {
+  background: var(--info);
+  border-color: #000;
+}
+
+.marker-start {
+  background: var(--success);
+  color: #000;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 11px;
+  border: 2px solid #000;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <div class="brand">
+      <div class="brand-mark">R</div>
+      <div>
+        RozvozPlan
+        <span class="brand-sub">v1.0</span>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-sm btn-ghost" onclick="exportJSONBackup()">↓ Backup</button>
+      <label class="btn btn-sm btn-ghost" style="cursor:pointer;">
+        ↑ Restore
+        <input type="file" accept="application/json" onchange="importJSONBackup(event)" style="display:none;">
+      </label>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-panel="importPanel">Import <span class="tab-badge" id="badgeImport">0</span></button>
+    <button class="tab" data-panel="customersPanel">Zákazníci <span class="tab-badge" id="badgeCustomers">0</span></button>
+    <button class="tab" data-panel="planPanel">Plán <span class="tab-badge" id="badgePlan">0</span></button>
+    <button class="tab" data-panel="outputPanel">Output</button>
+    <button class="tab" data-panel="settingsPanel">Nastavenia</button>
+  </div>
+</header>
+
+<main>
+
+<!-- IMPORT PANEL -->
+<div class="panel active" id="importPanel">
+
+  <div class="section" style="border-color: var(--accent);">
+    <div class="section-header" style="background: var(--accent-glow);">
+      <div class="section-title"><span class="section-title-accent"></span>Dnešné objednávky · sobota 16.5.2026</div>
+    </div>
+    <div class="section-body">
+      <p class="text-sm mb-3">6 zákazníkov z emailu DreamSofa.sk (13.5.). Z toho <strong>2 na predajňu</strong> Martin (Magnet+tab., Majdíš) — automaticky pôjdu do trasy ako prejazd cez predajňu.</p>
+      <button class="btn btn-primary" onclick="loadTodayData()">▶ Načítať dnešné dáta (6 zákazníkov)</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title"><span class="section-title-accent"></span>Paste z emailu</div>
+    </div>
+    <div class="section-body">
+      <p class="text-sm text-muted mb-3">Vlož skopírovaný text z emailu (formát DreamSofa.sk). Parser automaticky rozpozná zákazníkov. Položky s <code>Dovoz: Predajna</code> dostanú adresu predajne Martin a pôjdu auto-do-plánu.</p>
+      <textarea id="pasteArea" placeholder="--------- Preposlaná správa ---------
+Od: DreamSofa.sk
+...
+
+1. POB-2026-300-000370 DreamSofa p. Blažek - DS
+Kontakt: Mládeže 358/53 Mošovce 038 21 , +421 903768831
+Komplet: 60€+44€ RD 1p.
+Elementy: Long AL + 2,5OA QUER + UBER BK
+
+2. ..."></textarea>
+      <div class="btn-row mt-3">
+        <button class="btn btn-primary" onclick="parseFromTextarea()">▶ Spracovať text</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('pasteArea').value = EMAIL_SAMPLE">Vložiť vzor</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('pasteArea').value = ''">Vymazať</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title"><span class="section-title-accent"></span>Upload súboru</div>
+    </div>
+    <div class="section-body">
+      <p class="text-sm text-muted mb-3">Podporuje .txt, .eml a .html. Súbor sa prečíta a obsah pôjde cez ten istý parser.</p>
+      <label class="btn btn-primary" style="cursor:pointer;">
+        ▶ Vybrať súbor
+        <input type="file" id="fileInput" accept=".txt,.eml,.html,.htm" onchange="parseFromFile(event)" style="display:none;">
+      </label>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title"><span class="section-title-accent"></span>Manuálne pridanie zákazníka</div>
+    </div>
+    <div class="section-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>POB číslo</label>
+          <input type="text" id="mPob" class="mono" placeholder="POB-2026-300-000000">
+        </div>
+        <div class="form-group">
+          <label>Meno zákazníka</label>
+          <input type="text" id="mName" placeholder="DreamSofa p. Novák">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Adresa (ulica, mesto, PSČ)</label>
+        <input type="text" id="mAddress" placeholder="Hlavná 1, Topoľčany 95501">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Telefón</label>
+          <input type="tel" id="mPhone" class="mono" placeholder="+421 900 000 000">
+        </div>
+        <div class="form-group">
+          <label>Komplet (cena)</label>
+          <input type="text" id="mKomplet" placeholder="60€+30€ RD">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Elementy</label>
+        <input type="text" id="mElementy" placeholder="2,5 AL FU MOT + UBER">
+      </div>
+      <label class="switch mb-3" style="display: inline-flex;">
+        <input type="checkbox" id="mDepot">
+        <span class="switch-track"></span>
+        <span class="switch-label">Dovoz na predajňu Martin (auto do trasy)</span>
+      </label>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="addManualCustomer()">+ Pridať zákazníka</button>
+        <button class="btn btn-ghost" onclick="clearManualForm()">Vymazať</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- CUSTOMERS PANEL -->
+<div class="panel" id="customersPanel">
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">Spolu</div>
+      <div class="stat-value" id="statTotal">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Domov</div>
+      <div class="stat-value accent" id="statDelivery">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Na predajňu</div>
+      <div class="stat-value info" id="statDepot">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">V pláne</div>
+      <div class="stat-value success" id="statInPlan">0</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title"><span class="section-title-accent"></span>Zákazníci · plán dňa</div>
+      <div class="btn-row">
+        <button class="btn btn-sm btn-ghost" onclick="geocodeAllPending()">⚲ Geokódovať všetky</button>
+        <button class="btn btn-sm btn-danger" onclick="clearAllCustomers()">Vymazať všetky</button>
+      </div>
+    </div>
+    <div class="section-body">
+      <div id="customerList" class="customer-list"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- PLAN PANEL -->
+<div class="panel" id="planPanel">
+
+  <div class="section no-print">
+    <div class="section-header">
+      <div class="section-title"><span class="section-title-accent"></span>Konfigurácia trasy</div>
+    </div>
+    <div class="section-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Štart (depo)</label>
+          <input type="text" id="startAddress" value="Topoľčany, Slovensko">
+        </div>
+        <div class="form-group">
+          <label>Dátum rozvozu</label>
+          <input type="text" id="planDate" placeholder="napr. sobota 16.5.2026">
+        </div>
+      </div>
+      <label class="switch mb-3" style="display: inline-flex;">
+        <input type="checkbox" id="returnToDepot">
+        <span class="switch-track"></span>
+        <span class="switch-label">Návrat do Topoľčian na konci trasy</span>
+      </label>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="autoSortPlan()">⚡ Auto-zoradenie (najbližší prvý)</button>
+        <button class="btn btn-ghost" onclick="renderMapPreview()">↻ Obnoviť mapu</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="print-only" style="text-align: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #000;">
+    <h1 style="font-size: 22px; margin-bottom: 4px;">PLÁN ROZVOZU</h1>
+    <p class="mono" id="printDate" style="font-size: 12px;"></p>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">Zastávok</div>
+      <div class="stat-value accent" id="statStops">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Vzdialenosť (km)</div>
+      <div class="stat-value" id="statDistance">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Najvzdialenejší</div>
+      <div class="stat-value" id="statFarthest">—</div>
+    </div>
+  </div>
+
+  <div class="split">
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title"><span class="section-title-accent"></span>Trasa <span class="text-dim text-xs">· ťahaj pre presun</span></div>
+        <button class="btn btn-sm btn-ghost no-print" onclick="clearPlan()">Vyprázdniť</button>
+      </div>
+      <div class="section-body">
+        <div id="planList" class="plan-list"></div>
+        <div class="divider"></div>
+        <p class="text-xs text-muted">Pridať ďalších zákazníkov → tab <strong>Zákazníci</strong> → klikni "+ Plán"</p>
+      </div>
+    </div>
+
+    <div class="section no-print">
+      <div class="section-header">
+        <div class="section-title"><span class="section-title-accent"></span>Mapa náhľad</div>
+      </div>
+      <div class="section-body">
+        <div id="planMap"></div>
+        <p class="text-xs text-muted mt-2">OSM podklad. Skutočná navigácia pre vodiča je v QR kóde (Google Maps).</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- OUTPUT PANEL -->
+<div class="panel" id="outputPanel">
+
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title"><span class="section-title-accent"></span>QR kód pre vodiča</div>
+    </div>
+    <div class="section-body">
+      <p class="text-sm text-muted mb-3">Vodič nasníma QR → otvorí sa Google Maps s celou trasou pripravenou na navigáciu.</p>
+      <div id="qrContainer" style="text-align: center;">
+        <div class="empty-state">
+          <div class="empty-state-icon">📱</div>
+          <div>Najprv vytvor plán s aspoň 1 zastávkou.</div>
+        </div>
+      </div>
+      <div id="qrLinkWrap" class="mt-3" style="display:none;">
+        <label>URL pre Google Maps (manuálne kopírovanie)</label>
+        <textarea id="qrLink" readonly style="min-height: 60px; font-size: 11px;"></textarea>
+        <div class="btn-row mt-2">
+          <button class="btn btn-sm btn-ghost" onclick="copyMapURL()">📋 Kopírovať URL</button>
+          <button class="btn btn-sm btn-ghost" onclick="openMapURL()">↗ Otvoriť v prehliadači</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title"><span class="section-title-accent"></span>Export dokumentu</div>
+    </div>
+    <div class="section-body">
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="exportPDF()">📄 Stiahnuť PDF</button>
+        <button class="btn btn-primary" onclick="printPlan()">🖨 Tlač (Ctrl+P)</button>
+      </div>
+      <p class="text-xs text-muted mt-3">PDF: generuje sa cez jsPDF (bez závislosti na prehliadači).<br>Tlač: použije systémové dialógové okno tlače — možnosť uložiť ako PDF cez OS.</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- SETTINGS PANEL -->
+<div class="panel" id="settingsPanel">
+
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title"><span class="section-title-accent"></span>Adresa predajne</div>
+    </div>
+    <div class="section-body">
+      <div class="form-group">
+        <label>Predajňa DreamSofa Martin</label>
+        <input type="text" id="shopAddress" value="Jilemnického 4841/8, 036 01 Martin">
+        <p class="text-xs text-muted mt-2">Adresa kam pôjdu položky označené ako <code>Dovoz: Predajna</code>. Auto-vyplní sa pri importe.</p>
+      </div>
+      <button class="btn btn-primary" onclick="updateShopAddress()">Uložiť a geokódovať</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title"><span class="section-title-accent"></span>Záloha dát</div>
+    </div>
+    <div class="section-body">
+      <p class="text-sm text-muted mb-3">Aplikácia ukladá zákazníkov a plán do localStorage prehliadača. Pre prenos medzi PC použi export JSON.</p>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="exportJSONBackup()">↓ Export JSON</button>
+        <label class="btn btn-ghost" style="cursor:pointer;">
+          ↑ Import JSON
+          <input type="file" accept="application/json" onchange="importJSONBackup(event)" style="display:none;">
+        </label>
+        <button class="btn btn-danger" onclick="resetAll()">⚠ Vymazať VŠETKO</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title"><span class="section-title-accent"></span>O aplikácii</div>
+    </div>
+    <div class="section-body">
+      <p class="text-sm mb-2"><strong>RozvozPlan v1.0</strong> · Lokálny dispatcher tool</p>
+      <p class="text-sm text-muted mb-3">Single-file HTML. Beží lokálne v prehliadači. Nevyžaduje server ani API key.</p>
+      <div class="text-xs text-muted">
+        <p><strong>Mapy:</strong> Leaflet + OpenStreetMap (free)</p>
+        <p><strong>Geocoding:</strong> Nominatim (free, 1 req/s)</p>
+        <p><strong>Navigácia:</strong> Google Maps URL (bez API key)</p>
+        <p><strong>QR:</strong> qrcodejs · <strong>PDF:</strong> jsPDF · <strong>Drag:</strong> SortableJS</p>
+        <p class="mt-2"><strong>GDPR:</strong> všetky dáta zostávajú lokálne v tvojom prehliadači.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</main>
+
+<div class="toast-host" id="toastHost"></div>
+
+<script>
+/* ============================================================
+   ROZVOZPLAN v1.0 - single-file dispatcher tool
+   ============================================================ */
+
+const DEPOT_DEFAULT_COORDS = [48.5566, 18.1768]; // Topoľčany
+const SHOP_DEFAULT_ADDRESS = 'Jilemnického 4841/8, 036 01 Martin';
+const SHOP_DEFAULT_COORDS = [49.0664, 18.9221]; // DreamSofa Martin (approx)
+const STORAGE_KEY = 'rozvozplan_v1';
+const NOMINATIM_DELAY = 1100; // ms between requests
+
+const state = {
+  customers: [],   // ALL stops (home delivery + shop delivery)
+  depotItems: [],  // LEGACY (kept for backwards-compat migration)
+  planIds: [],     // ordered list of customer IDs in plan
+  config: {
+    startAddress: 'Topoľčany, Slovensko',
+    startCoords: DEPOT_DEFAULT_COORDS,
+    shopAddress: SHOP_DEFAULT_ADDRESS,
+    shopCoords: SHOP_DEFAULT_COORDS,
+    returnToDepot: false,
+    planDate: 'sobota 16.5.2026'
+  }
+};
+
+// Sample email data (today's order from email screenshot)
+const EMAIL_SAMPLE = `---------- Preposlaná správa ---------
+Od: DreamSofa.sk <dreamsofa@dreamsofa.sk>
+Dátum: st 13. 5. 2026 o 15:45
+Predmet: rozvoz 16.5. sobota
+Komu: Patrikmihok23 <patrikmihok23@gmail.com>
+
+Dobrý deň,
+
+poprosím na sobotu 16.5. rozvoz.
+
+1. POB-2026-300-000370 DreamSofa p. Blažek - DS
+Kontakt: Mládeže 358/53 Mošovce 038 21 , +421 903768831
+Komplet: 60€+44€ RD 1p.
+Elementy: Long AL + 2,5OA QUER + UBER BK
+
+2. POB-2026-300-000318 DreamSofa p. Dikyová
+Kontakt: Č. Armády 7 , Martin 03601 , +421 915820450
+Komplet: 60€+44€ RD 1p.
+Elementy: 1ABH L BK + Roh + 2AR QUER
+
+3. POB-2026-300-000405 DreamSofa MAGNET plus tab.- DS
+Kontakt:
+Dovoz:Predajna
+Elementy: Hockerbank mini (85x60cm)
+
+4. POB-2026-300-000381 DreamSofa p. Majdíš
+Kontakt:
+Dovoz:Predajna
+Elementy: 1,8AL+ROH+2,5 QUER+1,5AR
+
+5. POB-2026-300-000368 DreamSofa p. Pažitka
+Kontakt: Majerná 13 Martin Martin 03601 , +421915565898
+Komplet: 60€+30€ RD
+Elementy: 2,5 AL FU MOT +UBER
+
+6. POB-2026-300-000369 DreamSofa p. Marušaková – DS
+Kontakt: Nad Studňou 295/14 , 010 04 Hôrky , +421904336726
+Komplet: 60€+30€ RD
+Elementy: UBEL BK+2,5AR + taburet
+
+ĎAKUJEM!`;
+
+let planMap = null;
+let planMapMarkers = [];
+let planMapRoute = null;
+
+/* ---------- STORAGE ---------- */
+
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    toast('Chyba pri ukladaní: ' + e.message, 'error');
+  }
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    Object.assign(state, data);
+    if (!state.config) state.config = {};
+    if (!state.config.startCoords) state.config.startCoords = DEPOT_DEFAULT_COORDS;
+    if (!state.config.shopAddress) state.config.shopAddress = SHOP_DEFAULT_ADDRESS;
+    if (!state.config.shopCoords) state.config.shopCoords = SHOP_DEFAULT_COORDS;
+    // Migrate legacy depotItems → customers with toShop flag
+    if (state.depotItems && state.depotItems.length > 0) {
+      for (const item of state.depotItems) {
+        item.toShop = true;
+        if (!item.address) {
+          item.address = state.config.shopAddress;
+          item.coords = state.config.shopCoords;
+          item.geoStatus = 'ok';
+        }
+        // Avoid duplicate if same POB already in customers
+        if (!state.customers.find(c => c.pob === item.pob)) {
+          state.customers.push(item);
+        }
+      }
+      state.depotItems = [];
+    }
+    // Backwards-compat: rename toDepot → toShop on existing customers
+    for (const c of state.customers) {
+      if (c.toDepot !== undefined) {
+        c.toShop = c.toDepot;
+        delete c.toDepot;
+        if (c.toShop && !c.address) {
+          c.address = state.config.shopAddress;
+          c.coords = state.config.shopCoords;
+          c.geoStatus = 'ok';
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Load failed:', e);
+  }
+}
+
+function exportJSONBackup() {
+  const data = JSON.stringify(state, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `rozvozplan-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Záloha stiahnutá', 'success');
+}
+
+function importJSONBackup(ev) {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.customers) throw new Error('Neplatný formát zálohy');
+      if (!confirm('Toto prepíše súčasné dáta. Pokračovať?')) return;
+      Object.assign(state, data);
+      save();
+      renderAll();
+      toast('Záloha obnovená', 'success');
+    } catch (err) {
+      toast('Chyba: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+  ev.target.value = '';
+}
+
+function loadTodayData() {
+  const parsed = parseEmail(EMAIL_SAMPLE);
+  ingestParsed(parsed);
+  state.config.planDate = 'sobota 16.5.2026';
+  save();
+  document.getElementById('planDate').value = state.config.planDate;
+}
+
+async function updateShopAddress() {
+  const newAddr = document.getElementById('shopAddress').value.trim();
+  if (!newAddr) { toast('Adresa je prázdna', 'error'); return; }
+  state.config.shopAddress = newAddr;
+  toast('Geokódujem adresu predajne…', 'info');
+  const coords = await geocode(newAddr);
+  if (coords) {
+    state.config.shopCoords = coords;
+    // Update all shop customers
+    for (const c of state.customers) {
+      if (c.toShop && (c.address === SHOP_DEFAULT_ADDRESS || !c.address)) {
+        c.address = newAddr;
+        c.coords = coords;
+        c.geoStatus = 'ok';
+      }
+    }
+    toast('Adresa predajne uložená a geokódovaná', 'success');
+  } else {
+    toast('Geokódovanie zlyhalo, adresa uložená bez súradníc', 'error');
+  }
+  save();
+  renderAll();
+}
+
+function resetAll() {
+  if (!confirm('Vymazať VŠETKÝCH zákazníkov, plán a nastavenia?')) return;
+  if (!confirm('Naozaj? Toto sa nedá vrátiť.')) return;
+  state.customers = [];
+  state.depotItems = [];
+  state.planIds = [];
+  state.config = {
+    startAddress: 'Topoľčany, Slovensko',
+    startCoords: DEPOT_DEFAULT_COORDS,
+    shopAddress: SHOP_DEFAULT_ADDRESS,
+    shopCoords: SHOP_DEFAULT_COORDS,
+    returnToDepot: false,
+    planDate: ''
+  };
+  save();
+  document.getElementById('startAddress').value = state.config.startAddress;
+  document.getElementById('shopAddress').value = state.config.shopAddress;
+  document.getElementById('planDate').value = '';
+  document.getElementById('returnToDepot').checked = false;
+  renderAll();
+  toast('Všetko vymazané', 'info');
+}
+
+/* ---------- EMAIL PARSER ---------- */
+
+function parseEmail(text) {
+  // Normalize whitespace
+  const normalized = text.replace(/\r/g, '').replace(/\u00a0/g, ' ');
+  const lines = normalized.split('\n').map(l => l.trim());
+
+  const customers = [];
+  let current = null;
+
+  // Regex for customer header: "1. POB-2026-300-000370 DreamSofa p. Blažek - DS"
+  const headerRx = /^(\d+)\.\s*(POB-\d{4}-\d{3}-\d{6})\s+(.+)$/i;
+  const phoneRx = /(\+?421[\s-]?\d{2,3}[\s-]?\d{3}[\s-]?\d{3})/;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line) continue;
+
+    const headerMatch = line.match(headerRx);
+    if (headerMatch) {
+      if (current) customers.push(current);
+      current = {
+        id: `c_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        seq: parseInt(headerMatch[1]),
+        pob: headerMatch[2],
+        name: headerMatch[3].trim(),
+        address: '',
+        phone: '',
+        komplet: '',
+        elementy: '',
+        toShop: false,
+        coords: null,
+        geoStatus: 'pending' // pending | ok | fail
+      };
+      continue;
+    }
+
+    if (!current) continue;
+
+    if (/^Kontakt:/i.test(line)) {
+      const body = line.replace(/^Kontakt:\s*/i, '').trim();
+      const phoneMatch = body.match(phoneRx);
+      if (phoneMatch) {
+        current.phone = phoneMatch[1].replace(/[\s-]/g, '');
+        current.address = body.replace(phoneRx, '').replace(/,\s*,/g, ',').replace(/,\s*$/, '').trim();
+      } else {
+        current.address = body;
+      }
+      // Address may continue on next line if no phone yet
+      continue;
+    }
+
+    if (/^Dovoz:\s*Predajna/i.test(line)) {
+      current.toShop = true;
+      continue;
+    }
+
+    if (/^Komplet:/i.test(line)) {
+      current.komplet = line.replace(/^Komplet:\s*/i, '').trim();
+      continue;
+    }
+
+    if (/^Elementy:/i.test(line)) {
+      current.elementy = line.replace(/^Elementy:\s*/i, '').trim();
+      continue;
+    }
+  }
+
+  if (current) customers.push(current);
+
+  // Deduplicate by POB (some emails list customer twice: header summary + detail block)
+  const seen = new Map();
+  for (const c of customers) {
+    const existing = seen.get(c.pob);
+    if (!existing) {
+      seen.set(c.pob, c);
+    } else {
+      // Merge: prefer non-empty fields
+      ['address','phone','komplet','elementy'].forEach(k => {
+        if (!existing[k] && c[k]) existing[k] = c[k];
+      });
+      if (c.toShop) existing.toShop = true;
+    }
+  }
+
+  return Array.from(seen.values());
+}
+
+function parseFromTextarea() {
+  const text = document.getElementById('pasteArea').value;
+  if (!text.trim()) { toast('Prázdny text', 'error'); return; }
+  const parsed = parseEmail(text);
+  ingestParsed(parsed);
+}
+
+function parseFromFile(ev) {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    let content = e.target.result;
+    // If HTML/EML, strip tags
+    if (/<[a-z][\s\S]*>/i.test(content)) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = content;
+      content = tmp.innerText || tmp.textContent;
+    }
+    const parsed = parseEmail(content);
+    ingestParsed(parsed);
+  };
+  reader.readAsText(file);
+  ev.target.value = '';
+}
+
+function ingestParsed(parsed) {
+  if (parsed.length === 0) {
+    toast('Nenašiel som žiadnych zákazníkov. Skontroluj formát.', 'error');
+    return;
+  }
+  let added = 0, skipped = 0, autoAddedToPlan = 0;
+  for (const c of parsed) {
+    const existing = state.customers.find(x => x.pob === c.pob);
+    if (existing) { skipped++; continue; }
+    // Shop items: auto-fill address with shop address if empty, and auto-add to plan
+    if (c.toShop && !c.address) {
+      c.address = state.config.shopAddress;
+      c.coords = state.config.shopCoords;
+      c.geoStatus = 'ok';
+    }
+    state.customers.push(c);
+    // Shop items must be in route → auto-add to plan
+    if (c.toShop && !state.planIds.includes(c.id)) {
+      state.planIds.push(c.id);
+      autoAddedToPlan++;
+    }
+    added++;
+  }
+  save();
+  renderAll();
+  let msg = `Pridaných: ${added}, preskočených (duplicita): ${skipped}`;
+  if (autoAddedToPlan > 0) msg += ` · Predajňa auto-do-plánu: ${autoAddedToPlan}`;
+  toast(msg, 'success');
+  switchTab('customersPanel');
+}
+
+function addManualCustomer() {
+  const pob = document.getElementById('mPob').value.trim();
+  const name = document.getElementById('mName').value.trim();
+  const address = document.getElementById('mAddress').value.trim();
+  const phone = document.getElementById('mPhone').value.replace(/\s/g, '');
+  const komplet = document.getElementById('mKomplet').value.trim();
+  const elementy = document.getElementById('mElementy').value.trim();
+  const toShop = document.getElementById('mDepot').checked;
+
+  if (!name) { toast('Vyplň aspoň meno', 'error'); return; }
+
+  const c = {
+    id: `c_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    pob: pob || `MANUAL-${Date.now()}`,
+    name, address, phone, komplet, elementy, toShop,
+    coords: null,
+    geoStatus: 'pending'
+  };
+
+  // Shop item without address → fill with shop address
+  if (toShop && !c.address) {
+    c.address = state.config.shopAddress;
+    c.coords = state.config.shopCoords;
+    c.geoStatus = 'ok';
+  }
+
+  state.customers.push(c);
+  if (toShop && !state.planIds.includes(c.id)) state.planIds.push(c.id);
+
+  save();
+  renderAll();
+  clearManualForm();
+  toast('Zákazník pridaný' + (toShop ? ' (predajňa → auto-do-plánu)' : ''), 'success');
+}
+
+function clearManualForm() {
+  ['mPob','mName','mAddress','mPhone','mKomplet','mElementy'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('mDepot').checked = false;
+}
+
+/* ---------- GEOCODING (Nominatim) ---------- */
+
+let geocodeQueue = [];
+let geocodeRunning = false;
+
+async function geocode(address) {
+  if (!address) return null;
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&countrycodes=sk,cz&format=json&limit=1`;
+  try {
+    const res = await fetch(url, { headers: { 'Accept-Language': 'sk' } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data.length === 0) return null;
+    return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+  } catch (e) {
+    console.warn('Geocode failed for', address, e);
+    return null;
+  }
+}
+
+async function geocodeCustomer(customer) {
+  customer.geoStatus = 'pending';
+  renderCustomers();
+  // Try full address
+  let coords = await geocode(customer.address + ', Slovensko');
+  if (!coords && customer.address) {
+    // Try without house number
+    const simpler = customer.address.replace(/\d+\/?\d*/g, '').replace(/\s+/g, ' ').trim();
+    coords = await geocode(simpler + ', Slovensko');
+  }
+  if (coords) {
+    customer.coords = coords;
+    customer.geoStatus = 'ok';
+  } else {
+    customer.geoStatus = 'fail';
+  }
+  save();
+  renderCustomers();
+  return coords;
+}
+
+async function geocodeAllPending() {
+  const pending = state.customers.filter(c => c.geoStatus !== 'ok' && c.address);
+  if (pending.length === 0) {
+    toast('Všetky adresy už sú geokódované', 'info');
+    return;
+  }
+  toast(`Geokódovanie ${pending.length} adries (cca ${Math.ceil(pending.length * NOMINATIM_DELAY / 1000)}s)…`, 'info');
+  for (const c of pending) {
+    await geocodeCustomer(c);
+    await new Promise(r => setTimeout(r, NOMINATIM_DELAY));
+  }
+  toast('Geokódovanie hotové', 'success');
+  renderAll();
+}
+
+/* ---------- DISTANCE ---------- */
+
+function haversine(a, b) {
+  if (!a || !b) return Infinity;
+  const R = 6371; // km
+  const toRad = x => x * Math.PI / 180;
+  const dLat = toRad(b[0] - a[0]);
+  const dLon = toRad(b[1] - a[1]);
+  const lat1 = toRad(a[0]);
+  const lat2 = toRad(b[0]);
+  const h = Math.sin(dLat/2)**2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/* ---------- PLAN OPERATIONS ---------- */
+
+function inPlan(customerId) {
+  return state.planIds.includes(customerId);
+}
+
+function addToPlan(customerId) {
+  if (!inPlan(customerId)) {
+    state.planIds.push(customerId);
+    save();
+    renderAll();
+  }
+}
+
+function removeFromPlan(customerId) {
+  state.planIds = state.planIds.filter(id => id !== customerId);
+  save();
+  renderAll();
+}
+
+function togglePlan(customerId) {
+  if (inPlan(customerId)) removeFromPlan(customerId);
+  else addToPlan(customerId);
+}
+
+function clearPlan() {
+  if (state.planIds.length === 0) return;
+  if (!confirm('Vyprázdniť plán?')) return;
+  state.planIds = [];
+  save();
+  renderAll();
+}
+
+function getPlanCustomers() {
+  return state.planIds.map(id => state.customers.find(c => c.id === id)).filter(Boolean);
+}
+
+async function autoSortPlan() {
+  const planCs = getPlanCustomers();
+  if (planCs.length < 2) { toast('Pridaj aspoň 2 zákazníkov do plánu', 'info'); return; }
+
+  // Geocode any pending
+  const pending = planCs.filter(c => c.geoStatus !== 'ok' && c.address);
+  if (pending.length > 0) {
+    toast(`Geokódujem ${pending.length} adries pre triedenie…`, 'info');
+    for (const c of pending) {
+      await geocodeCustomer(c);
+      await new Promise(r => setTimeout(r, NOMINATIM_DELAY));
+    }
+  }
+
+  // Ensure depot coords
+  if (state.config.startAddress && (!state.config.startCoords || state.config.startCoords[0] === DEPOT_DEFAULT_COORDS[0])) {
+    const depotCoords = await geocode(state.config.startAddress);
+    if (depotCoords) state.config.startCoords = depotCoords;
+  }
+
+  // Nearest-neighbor TSP heuristic
+  const start = state.config.startCoords;
+  const remaining = planCs.filter(c => c.coords).slice();
+  const noCoords = planCs.filter(c => !c.coords);
+  const ordered = [];
+  let cursor = start;
+  while (remaining.length > 0) {
+    let bestIdx = 0;
+    let bestDist = haversine(cursor, remaining[0].coords);
+    for (let i = 1; i < remaining.length; i++) {
+      const d = haversine(cursor, remaining[i].coords);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    }
+    const next = remaining.splice(bestIdx, 1)[0];
+    ordered.push(next);
+    cursor = next.coords;
+  }
+  // Append non-geocoded at the end (manual user fix)
+  ordered.push(...noCoords);
+
+  state.planIds = ordered.map(c => c.id);
+  save();
+  renderAll();
+  toast('Trasa zoradená podľa najbližšieho suseda', 'success');
+}
+
+/* ---------- GOOGLE MAPS URL ---------- */
+
+function buildGoogleMapsURL() {
+  const planCs = getPlanCustomers();
+  if (planCs.length === 0) return null;
+  const origin = encodeURIComponent(state.config.startAddress || 'Topoľčany');
+  let destination, waypoints;
+  if (state.config.returnToDepot) {
+    destination = origin;
+    waypoints = planCs.map(c => c.address || c.name).filter(Boolean);
+  } else {
+    const last = planCs[planCs.length - 1];
+    destination = encodeURIComponent(last.address || last.name);
+    waypoints = planCs.slice(0, -1).map(c => c.address || c.name).filter(Boolean);
+  }
+  const wp = waypoints.map(encodeURIComponent).join('|');
+  let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
+  if (wp) url += `&waypoints=${wp}`;
+  return url;
+}
+
+function copyMapURL() {
+  const url = document.getElementById('qrLink').value;
+  navigator.clipboard.writeText(url).then(() => toast('URL skopírovaná', 'success'));
+}
+
+function openMapURL() {
+  const url = document.getElementById('qrLink').value;
+  if (url) window.open(url, '_blank');
+}
+
+/* ---------- RENDER ---------- */
+
+function escapeHTML(s) {
+  if (!s) return '';
+  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+function renderCustomers() {
+  const list = document.getElementById('customerList');
+  const homeCustomers = state.customers.filter(c => !c.toShop);
+  const shopCustomers = state.customers.filter(c => c.toShop);
+
+  let html = '';
+  if (state.customers.length === 0) {
+    html = `<div class="empty-state"><div class="empty-state-icon">📭</div>Žiadni zákazníci. Začni cez tab <strong>Import</strong>.</div>`;
+  } else {
+    if (homeCustomers.length > 0) {
+      html += `<div class="subheader">Rozvoz domov · ${homeCustomers.length}</div>`;
+      html += homeCustomers.map(c => customerCardHTML(c)).join('');
+    }
+    if (shopCustomers.length > 0) {
+      html += `<div class="subheader info">Dovoz na predajňu Martin · ${shopCustomers.length} <span class="text-dim text-xs">(automaticky v trase)</span></div>`;
+      html += shopCustomers.map(c => customerCardHTML(c)).join('');
+    }
+  }
+  list.innerHTML = html;
+}
+
+function customerCardHTML(c) {
+  const inP = inPlan(c.id);
+  const isShop = !!c.toShop;
+  const geoTag = c.geoStatus === 'ok'
+    ? '<span class="tag geo-ok">✓ Geo</span>'
+    : c.geoStatus === 'fail'
+      ? '<span class="tag geo-fail">✗ Geo</span>'
+      : '<span class="tag geo-pending">○ Geo</span>';
+
+  return `
+    <div class="customer-card ${inP ? 'in-plan' : ''} ${isShop ? 'depot' : ''}">
+      <div class="customer-head">
+        <div>
+          <div class="customer-name">${escapeHTML(c.name)}</div>
+          <div class="customer-pob">${escapeHTML(c.pob)}</div>
+        </div>
+        <div class="btn-row" style="flex-wrap: nowrap;">
+          ${isShop ? '<span class="tag depot-tag">→ Predajňa</span>' : geoTag}
+          ${inP ? '<span class="tag" style="color:var(--accent);border-color:var(--accent);">V pláne</span>' : ''}
+        </div>
+      </div>
+      <div class="customer-meta">
+        ${c.address ? `<div class="customer-meta-row"><span class="meta-label">Adresa</span><span>${escapeHTML(c.address)}</span></div>` : ''}
+        ${c.phone ? `<div class="customer-meta-row"><span class="meta-label">Telefón</span><span class="mono">${escapeHTML(c.phone)}</span></div>` : ''}
+        ${c.komplet ? `<div class="customer-meta-row"><span class="meta-label">Komplet</span><span>${escapeHTML(c.komplet)}</span></div>` : ''}
+        ${c.elementy ? `<div class="customer-meta-row"><span class="meta-label">Elementy</span><span>${escapeHTML(c.elementy)}</span></div>` : ''}
+      </div>
+      <div class="customer-actions">
+        <button class="btn btn-sm ${inP ? 'btn-ghost' : 'btn-primary'}" onclick="togglePlan('${c.id}')">${inP ? '− Z plánu' : '+ Plán'}</button>
+        <button class="btn btn-sm btn-ghost" onclick="geocodeCustomerAndRefresh('${c.id}')">⚲ Geo</button>
+        <button class="btn btn-sm btn-ghost" onclick="editCustomer('${c.id}')">✎ Edit</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteCustomer('${c.id}')">×</button>
+      </div>
+    </div>
+  `;
+}
+
+async function geocodeCustomerAndRefresh(id) {
+  const c = state.customers.find(x => x.id === id);
+  if (!c) return;
+  if (!c.address) { toast('Bez adresy nedá geokódovať', 'error'); return; }
+  await geocodeCustomer(c);
+  renderAll();
+}
+
+function editCustomer(id) {
+  const c = state.customers.find(x => x.id === id);
+  if (!c) return;
+  const newAddress = prompt('Adresa:', c.address);
+  if (newAddress === null) return;
+  c.address = newAddress.trim();
+  c.coords = null;
+  c.geoStatus = 'pending';
+  save();
+  renderAll();
+}
+
+function deleteCustomer(id) {
+  if (!confirm('Vymazať tohto zákazníka?')) return;
+  state.customers = state.customers.filter(c => c.id !== id);
+  state.planIds = state.planIds.filter(pid => pid !== id);
+  save();
+  renderAll();
+}
+
+function clearAllCustomers() {
+  if (!confirm('Vymazať VŠETKÝCH zákazníkov?')) return;
+  state.customers = [];
+  state.planIds = [];
+  save();
+  renderAll();
+}
+
+function renderPlan() {
+  const list = document.getElementById('planList');
+  const planCs = getPlanCustomers();
+
+  if (planCs.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🛻</div>Plán je prázdny. Pridaj zákazníkov z tabu <strong>Zákazníci</strong>.</div>`;
+    document.getElementById('statStops').textContent = '0';
+    document.getElementById('statDistance').textContent = '—';
+    document.getElementById('statFarthest').textContent = '—';
+    return;
+  }
+
+  let totalKm = 0;
+  let cursor = state.config.startCoords;
+  let farthest = 0;
+  let farthestName = '—';
+
+  list.innerHTML = planCs.map((c, idx) => {
+    let segKm = '—';
+    if (c.coords && cursor) {
+      const d = haversine(cursor, c.coords);
+      segKm = d.toFixed(1);
+      totalKm += d;
+      const fromStart = haversine(state.config.startCoords, c.coords);
+      if (fromStart > farthest) { farthest = fromStart; farthestName = c.name.split(' ').slice(-1)[0]; }
+      cursor = c.coords;
+    }
+    const isShop = !!c.toShop;
+    return `
+      <div class="plan-item ${isShop ? 'depot' : ''}" data-id="${c.id}">
+        <div class="plan-num ${isShop ? 'depot' : ''}">${idx + 1}</div>
+        <div class="plan-info">
+          <div class="plan-name">${escapeHTML(c.name)} ${isShop ? '<span class="tag depot-tag" style="margin-left:4px;">→ Predajňa</span>' : ''}</div>
+          <div class="plan-meta">${escapeHTML(c.pob)} · ${escapeHTML(c.address || 'bez adresy')}${c.phone ? ' · ' + escapeHTML(c.phone) : ''}</div>
+        </div>
+        <div class="plan-distance">
+          <div><strong>${segKm}</strong> km</div>
+          <div class="text-dim text-xs no-print">${c.geoStatus === 'ok' ? '✓' : '○'}</div>
+          <button class="btn btn-sm btn-ghost no-print" style="margin-top:4px;" onclick="removeFromPlan('${c.id}')">×</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (state.config.returnToDepot && cursor) {
+    totalKm += haversine(cursor, state.config.startCoords);
+  }
+
+  document.getElementById('statStops').textContent = planCs.length;
+  document.getElementById('statDistance').textContent = totalKm > 0 ? totalKm.toFixed(1) : '—';
+  document.getElementById('statFarthest').textContent = farthestName;
+
+  // Setup drag-drop
+  const planList = document.getElementById('planList');
+  if (planList && !planList.dataset.sortableInit) {
+    Sortable.create(planList, {
+      animation: 150,
+      handle: '.plan-item',
+      onEnd: (ev) => {
+        const newOrder = Array.from(planList.children).map(el => el.dataset.id).filter(Boolean);
+        state.planIds = newOrder;
+        save();
+        renderPlan();
+        renderMapPreview();
+      }
+    });
+    planList.dataset.sortableInit = '1';
+  }
+}
+
+function renderMapPreview() {
+  const mapEl = document.getElementById('planMap');
+  if (typeof L === 'undefined') {
+    if (mapEl) mapEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">⚠ Mapová knižnica (Leaflet) sa nenačítala.<br>Skontroluj internet a obnov stránku.</div>';
+    return;
+  }
+  const planCs = getPlanCustomers().filter(c => c.coords);
+  if (!planMap) {
+    planMap = L.map('planMap').setView(state.config.startCoords, 9);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OSM',
+      maxZoom: 18
+    }).addTo(planMap);
+  }
+
+  // Clear old
+  planMapMarkers.forEach(m => planMap.removeLayer(m));
+  planMapMarkers = [];
+  if (planMapRoute) { planMap.removeLayer(planMapRoute); planMapRoute = null; }
+
+  // Start marker
+  const startMarker = L.marker(state.config.startCoords, {
+    icon: L.divIcon({
+      html: '<div class="marker-start">DEPO</div>',
+      iconSize: [50, 24],
+      iconAnchor: [25, 12],
+      className: ''
+    })
+  }).addTo(planMap).bindPopup(`<strong>Depo</strong><br>${escapeHTML(state.config.startAddress)}`);
+  planMapMarkers.push(startMarker);
+
+  const pts = [state.config.startCoords];
+
+  planCs.forEach((c, idx) => {
+    const isShop = !!c.toShop;
+    const m = L.marker(c.coords, {
+      icon: L.divIcon({
+        html: `<div class="marker-num ${isShop ? 'shop' : ''}">${idx + 1}</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        className: ''
+      })
+    }).addTo(planMap).bindPopup(`<strong>${idx+1}. ${escapeHTML(c.name)}</strong>${isShop ? ' <em>(→ predajňa)</em>' : ''}<br>${escapeHTML(c.address || '')}<br>${escapeHTML(c.phone || '')}`);
+    planMapMarkers.push(m);
+    pts.push(c.coords);
+  });
+
+  if (state.config.returnToDepot) pts.push(state.config.startCoords);
+
+  if (pts.length > 1) {
+    planMapRoute = L.polyline(pts, {
+      color: '#ff6b1a',
+      weight: 3,
+      opacity: 0.7,
+      dashArray: '6, 6'
+    }).addTo(planMap);
+    planMap.fitBounds(L.latLngBounds(pts), { padding: [30, 30] });
+  } else if (pts.length === 1) {
+    planMap.setView(pts[0], 11);
+  }
+
+  setTimeout(() => planMap.invalidateSize(), 100);
+}
+
+function renderQR() {
+  const container = document.getElementById('qrContainer');
+  const linkWrap = document.getElementById('qrLinkWrap');
+  const url = buildGoogleMapsURL();
+
+  if (!url) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📱</div>Najprv vytvor plán s aspoň 1 zastávkou.</div>`;
+    linkWrap.style.display = 'none';
+    return;
+  }
+
+  container.innerHTML = '<div class="qr-wrap" id="qrCode"></div>';
+  document.getElementById('qrCode').innerHTML = '';
+  new QRCode(document.getElementById('qrCode'), {
+    text: url,
+    width: 240,
+    height: 240,
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  document.getElementById('qrLink').value = url;
+  linkWrap.style.display = 'block';
+}
+
+function renderBadges() {
+  const home = state.customers.filter(c => !c.toShop).length;
+  const shop = state.customers.filter(c => c.toShop).length;
+  document.getElementById('badgeImport').textContent = state.customers.length;
+  document.getElementById('badgeCustomers').textContent = state.customers.length;
+  document.getElementById('badgePlan').textContent = state.planIds.length;
+  document.getElementById('statTotal').textContent = state.customers.length;
+  document.getElementById('statDelivery').textContent = home;
+  document.getElementById('statDepot').textContent = shop;
+  document.getElementById('statInPlan').textContent = state.planIds.length;
+}
+
+function renderAll() {
+  renderBadges();
+  renderCustomers();
+  renderPlan();
+  if (document.getElementById('planPanel').classList.contains('active')) renderMapPreview();
+  if (document.getElementById('outputPanel').classList.contains('active')) renderQR();
+}
+
+/* ---------- PDF EXPORT ---------- */
+
+async function exportPDF() {
+  const planCs = getPlanCustomers();
+  if (planCs.length === 0) { toast('Prázdny plán', 'error'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const margin = 14;
+  let y = margin;
+
+  // Header
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text('PLAN ROZVOZU', margin, y);
+  y += 7;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  const dateStr = state.config.planDate || new Date().toLocaleDateString('sk-SK');
+  doc.text(`Datum: ${dateStr}  ·  Stop: ${planCs.length}  ·  Start: ${state.config.startAddress}`, margin, y);
+  y += 8;
+  doc.setDrawColor(255, 107, 26);
+  doc.setLineWidth(0.5);
+  doc.line(margin, y, pageW - margin, y);
+  y += 6;
+
+  // QR code
+  const url = buildGoogleMapsURL();
+  if (url) {
+    const qrTmp = document.createElement('div');
+    new QRCode(qrTmp, { text: url, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
+    await new Promise(r => setTimeout(r, 200));
+    const qrCanvas = qrTmp.querySelector('canvas');
+    if (qrCanvas) {
+      const qrImg = qrCanvas.toDataURL('image/png');
+      const qrSize = 38;
+      doc.addImage(qrImg, 'PNG', pageW - margin - qrSize, y, qrSize, qrSize);
+      doc.setFontSize(8);
+      doc.setTextColor(80);
+      doc.text('Sken pre Google', pageW - margin - qrSize, y + qrSize + 4);
+      doc.text('Maps navigaciu', pageW - margin - qrSize, y + qrSize + 8);
+    }
+  }
+
+  doc.setTextColor(0);
+  doc.setFontSize(11);
+
+  let cursor = state.config.startCoords;
+  for (let i = 0; i < planCs.length; i++) {
+    const c = planCs[i];
+    let segKm = '?';
+    if (c.coords && cursor) {
+      segKm = haversine(cursor, c.coords).toFixed(1);
+      cursor = c.coords;
+    }
+
+    // Page break
+    if (y > 260) {
+      doc.addPage();
+      y = margin;
+    }
+
+    // Numbered box
+    doc.setFillColor(255, 107, 26);
+    doc.rect(margin, y - 4, 8, 8, 'F');
+    doc.setTextColor(0);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text(String(i + 1), margin + 4, y + 1.5, { align: 'center' });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    // Replace SK chars for PDF (jsPDF helvetica doesn't support them well)
+    const safeName = removeDiacritics(c.name) + (c.toShop ? '  [-> PREDAJNA]' : '');
+    doc.text(safeName, margin + 11, y);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(`${c.pob}  ·  ~${segKm} km`, margin + 11, y + 4);
+
+    doc.setTextColor(0);
+    doc.setFontSize(9);
+    let cy = y + 9;
+    if (c.address) { doc.text('Adresa:  ' + removeDiacritics(c.address), margin + 11, cy); cy += 4; }
+    if (c.phone)   { doc.text('Telefon: ' + c.phone, margin + 11, cy); cy += 4; }
+    if (c.komplet) { doc.text('Komplet: ' + removeDiacritics(c.komplet), margin + 11, cy); cy += 4; }
+    if (c.elementy){ doc.text('Elementy: ' + removeDiacritics(c.elementy), margin + 11, cy); cy += 4; }
+
+    y = cy + 3;
+    doc.setDrawColor(220);
+    doc.line(margin, y, pageW - margin, y);
+    y += 4;
+  }
+
+  // Footer
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= pageCount; p++) {
+    doc.setPage(p);
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(`RozvozPlan · strana ${p}/${pageCount}`, margin, 290);
+    doc.text(new Date().toLocaleString('sk-SK'), pageW - margin, 290, { align: 'right' });
+  }
+
+  doc.save(`rozvozplan-${dateStr.replace(/[\s.\/]/g, '-')}.pdf`);
+  toast('PDF stiahnuté', 'success');
+}
+
+function removeDiacritics(s) {
+  if (!s) return '';
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function printPlan() {
+  const planCs = getPlanCustomers();
+  if (planCs.length === 0) { toast('Prázdny plán', 'error'); return; }
+  switchTab('planPanel');
+  document.getElementById('printDate').textContent = state.config.planDate || new Date().toLocaleDateString('sk-SK');
+  setTimeout(() => window.print(), 150);
+}
+
+/* ---------- TABS ---------- */
+
+function switchTab(panelId) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.panel === panelId));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === panelId));
+  if (panelId === 'planPanel') setTimeout(renderMapPreview, 80);
+  if (panelId === 'outputPanel') renderQR();
+}
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => switchTab(t.dataset.panel));
+});
+
+/* ---------- CONFIG INPUTS ---------- */
+
+document.addEventListener('DOMContentLoaded', () => {
+  load();
+  document.getElementById('startAddress').value = state.config.startAddress;
+  document.getElementById('shopAddress').value = state.config.shopAddress;
+  document.getElementById('planDate').value = state.config.planDate || '';
+  document.getElementById('returnToDepot').checked = state.config.returnToDepot;
+
+  document.getElementById('startAddress').addEventListener('change', async e => {
+    state.config.startAddress = e.target.value.trim();
+    const c = await geocode(state.config.startAddress);
+    if (c) { state.config.startCoords = c; toast('Štart geokódovaný', 'success'); }
+    save();
+    renderAll();
+  });
+  document.getElementById('planDate').addEventListener('change', e => {
+    state.config.planDate = e.target.value;
+    save();
+  });
+  document.getElementById('returnToDepot').addEventListener('change', e => {
+    state.config.returnToDepot = e.target.checked;
+    save();
+    renderAll();
+  });
+
+  renderAll();
+});
+
+/* ---------- TOAST ---------- */
+
+function toast(msg, type = 'info') {
+  const host = document.getElementById('toastHost');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  host.appendChild(el);
+  setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transition = 'opacity 0.3s';
+    setTimeout(() => el.remove(), 300);
+  }, 3500);
+}
+
+</script>
+</body>
+</html>
